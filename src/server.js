@@ -47,3 +47,21 @@ app.get("/api/health", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🇸🇱 SaloneBiz Backend running on port ${PORT}`);
 });
+app.get("/api/health", async (req, res) => {
+  try {
+    await pool.query("SELECT 1");
+
+    res.json({
+      success: true,
+      status: "healthy",
+      database: "connected",
+      service: "salonebiz-backend"
+    });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      status: "unhealthy",
+      database: "disconnected"
+    });
+  }
+});
