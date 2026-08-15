@@ -3,10 +3,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 require("dotenv").config();
 
-const {
-  pool,
-  checkDatabaseConnection
-} = require("./config/database");
+const { checkDatabaseConnection } = require("./config/database");
 
 const app = express();
 
@@ -16,7 +13,6 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// HOME
 app.get("/", (req, res) => {
   res.json({
     success: true,
@@ -26,56 +22,32 @@ app.get("/", (req, res) => {
   });
 });
 
-// API HEALTH
 app.get("/api/health", async (req, res) => {
   try {
-    const db = await checkDatabaseConnection();
+    await checkDatabaseConnection();
 
-    res.status(200).json({
+    res.json({
       success: true,
       status: "healthy",
       database: "connected",
       service: "salonebiz-backend",
-      database_time: db.time,
+      version: "0.1.0",
       timestamp: new Date().toISOString()
     });
-
   } catch (error) {
-    console.error("❌ Database health check failed:");
-    console.error(error.message);
+    console.error("Database health check failed:", error.message);
 
     res.status(503).json({
       success: false,
       status: "unhealthy",
       database: "disconnected",
       service: "salonebiz-backend",
+      version: "0.1.0",
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// TEST DATABASE
-app.get("/api/db-test", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT 1 AS connected");
-
-    res.json({
-      success: true,
-      message: "PostgreSQL connection is working 🇸🇱",
-      result: result.rows[0]
-    });
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(503).json({
-      success: false,
-      message: "PostgreSQL connection failed"
-    });
-  }
-});
-
-// START SERVER
 app.listen(PORT, () => {
   console.log(`🇸🇱 SaloneBiz Backend running on port ${PORT}`);
 });
