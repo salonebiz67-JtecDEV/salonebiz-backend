@@ -7,19 +7,9 @@ const pool = new Pool({
   }
 });
 
-pool.on("error", (error) => {
-  console.error("Unexpected PostgreSQL error:", error);
-});
-
 async function checkDatabaseConnection() {
-  const client = await pool.connect();
-
-  try {
-    await client.query("SELECT 1");
-    console.log("✅ SaloneBiz database connected");
-  } finally {
-    client.release();
-  }
+  const result = await pool.query("SELECT 1");
+  return result.rows;
 }
 
 module.exports = {
