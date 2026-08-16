@@ -1,19 +1,18 @@
 const { Pool } = require("pg");
-require("dotenv").config();
 
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
-    console.error("❌ DATABASE_URL environment variable is missing.");
+    console.error("❌ DATABASE_URL is not set");
 }
 
 const pool = new Pool({
     connectionString: databaseUrl,
 
-    // Render/Supabase PostgreSQL uses SSL.
-    ssl: process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: false }
-        : false,
+    // Supabase/PostgreSQL commonly requires SSL in hosted environments.
+    ssl: {
+        rejectUnauthorized: false
+    },
 
     max: 10,
     idleTimeoutMillis: 30000,
@@ -21,12 +20,12 @@ const pool = new Pool({
 });
 
 pool.on("error", (error) => {
-    console.error("❌ Unexpected PostgreSQL pool error:", error.message);
+    console.error("❌ Unexpected PostgreSQL pool error:", error);
 });
 
 async function checkDatabaseConnection() {
     if (!databaseUrl) {
-        throw new Error("DATABASE_URL is not configured");
+        throw new Error("DATABASE_URL environment variable is missing");
     }
 
     const client = await pool.connect();
@@ -39,17 +38,7 @@ async function checkDatabaseConnection() {
     }
 }
 
-async function query(text, params = []) {
-    return pool.query(text, params);
-}
-
-async function closeDatabase() {
-    await pool.end();
-}
-
 module.exports = {
     pool,
-    query,
-    checkDatabaseConnection,
-    closeDatabase
+    checkDatabaseConnection
 };
