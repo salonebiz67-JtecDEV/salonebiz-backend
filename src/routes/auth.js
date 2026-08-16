@@ -1,9 +1,29 @@
 const express = require("express");
 const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
 
 const { pool } = require("../config/database");
 
 const router = express.Router();
+
+
+// ==========================================
+// JWT TOKEN
+// ==========================================
+
+function createToken(user) {
+    return jwt.sign(
+        {
+            id: user.id,
+            email: user.email,
+            role: user.role
+        },
+        process.env.JWT_SECRET,
+        {
+            expiresIn: process.env.JWT_EXPIRES_IN || "7d"
+        }
+    );
+}
 
 
 // ==========================================
@@ -59,10 +79,10 @@ function verifyPassword(password, storedPassword) {
 
 
 // ==========================================
-// HEALTH CHECK
+// AUTH HEALTH
 // ==========================================
 
-router.get("/health", async (req, res) => {
+router.get("/health", (req, res) => {
     res.json({
         success: true,
         service: "auth",
@@ -122,7 +142,7 @@ router.post("/register", async (req, res) => {
 
 
         // --------------------------------------
-        // CHECK EXISTING EMAIL
+        // CHECK EMAIL
         // --------------------------------------
 
         const existingUser = await pool.query(
@@ -145,7 +165,7 @@ router.post("/register", async (req, res) => {
 
 
         // --------------------------------------
-        // CHECK EXISTING PHONE
+        // CHECK PHONE
         // --------------------------------------
 
         const existingPhone = await pool.query(
@@ -238,6 +258,10 @@ router.post("/login", async (req, res) => {
         } = req.body || {};
 
 
+        // --------------------------------------
+        // VALIDATION
+        // --------------------------------------
+
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
@@ -251,6 +275,10 @@ router.post("/login", async (req, res) => {
             .toLowerCase();
 
 
+        // --------------------------------------
+        // FIND USER
+        // --------------------------------------
+
         const result = await pool.query(
             `
             SELECT
@@ -260,6 +288,7 @@ router.post("/login", async (req, res) => {
                 email,
                 password_hash,
                 role,
+                is_active,
                 created_at
             FROM users
             WHERE email = $1
@@ -280,6 +309,22 @@ router.post("/login", async (req, res) => {
         const user = result.rows[0];
 
 
+        // --------------------------------------
+        // CHECK ACTIVE ACCOUNT
+        // --------------------------------------
+
+        if (user.is_active === false) {
+            return res.status(403).json({
+                success: false,
+                message: "This account is inactive"
+            });
+        }
+
+
+        // --------------------------------------
+        // VERIFY PASSWORD
+        // --------------------------------------
+
         const passwordCorrect = verifyPassword(
             password,
             user.password_hash
@@ -294,12 +339,29 @@ router.post("/login", async (req, res) => {
         }
 
 
+        // --------------------------------------
+        // REMOVE PASSWORD HASH
+        // --------------------------------------
+
         delete user.password_hash;
 
+
+        // --------------------------------------
+        // CREATE JWT
+        // --------------------------------------
+
+        const token = createToken(user);
+
+
+        // --------------------------------------
+        // LOGIN SUCCESS
+        // --------------------------------------
 
         return res.json({
             success: true,
             message: "Login successful",
+            token,
+            expiresIn: process.env.JWT_EXPIRES_IN || "7d",
             user
         });
 
@@ -328,7 +390,7 @@ router.get("/database-test", async (req, res) => {
         );
 
 
-        res.json({
+        return res.json({
             success: true,
             database: "connected",
             time: result.rows[0].time
@@ -343,7 +405,7 @@ router.get("/database-test", async (req, res) => {
         );
 
 
-        res.status(503).json({
+        return res.status(503).json({
             success: false,
             database: "disconnected"
         });
