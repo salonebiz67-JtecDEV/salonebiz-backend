@@ -9,94 +9,76 @@ const {
 
 const authRoutes = require("./routes/auth");
 
-
 const app = express();
-
-
-// ======================================================
-// CONFIG
-// ======================================================
 
 const PORT = process.env.PORT || 3000;
 
 
-// ======================================================
+// ==========================================
 // SECURITY
-// ======================================================
+// ==========================================
 
 app.use(helmet());
 
-app.use(
-    cors({
-        origin: "*",
-        methods: [
-            "GET",
-            "POST",
-            "PUT",
-            "PATCH",
-            "DELETE",
-            "OPTIONS"
-        ],
-        allowedHeaders: [
-            "Content-Type",
-            "Authorization"
-        ]
-    })
-);
 
+// ==========================================
+// CORS
+// ==========================================
 
-// ======================================================
-// BODY PARSER
-// ======================================================
-
-app.use(express.json());
-
-app.use(express.urlencoded({
-    extended: true
+app.use(cors({
+    origin: "*",
+    methods: [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS"
+    ],
+    allowedHeaders: [
+        "Content-Type",
+        "Authorization"
+    ]
 }));
 
 
-// ======================================================
-// REQUEST LOGGER
-// ======================================================
+// ==========================================
+// BODY PARSER
+// ==========================================
 
-app.use((req, res, next) => {
-    console.log(
-        `${new Date().toISOString()} ${req.method} ${req.originalUrl}`
-    );
-
-    next();
-});
+app.use(express.json({
+    limit: "2mb"
+}));
 
 
-// ======================================================
+// ==========================================
 // HOME
-// ======================================================
+// ==========================================
 
 app.get("/", (req, res) => {
     res.json({
         success: true,
         app: "SaloneBiz",
         message: "SaloneBiz Backend is running 🇸🇱",
-        version: "0.2.0"
+        version: "0.3.0"
     });
 });
 
 
-// ======================================================
-// HEALTH CHECK
-// ======================================================
+// ==========================================
+// HEALTH
+// ==========================================
 
 app.get("/api/health", async (req, res) => {
     try {
         await checkDatabaseConnection();
 
-        return res.json({
+        res.status(200).json({
             success: true,
             status: "healthy",
             database: "connected",
             service: "salonebiz-backend",
-            version: "0.2.0",
+            version: "0.3.0",
             timestamp: new Date().toISOString()
         });
 
@@ -106,28 +88,28 @@ app.get("/api/health", async (req, res) => {
             error.message
         );
 
-        return res.status(503).json({
+        res.status(503).json({
             success: false,
             status: "unhealthy",
             database: "disconnected",
             service: "salonebiz-backend",
-            version: "0.2.0",
+            version: "0.3.0",
             timestamp: new Date().toISOString()
         });
     }
 });
 
 
-// ======================================================
+// ==========================================
 // AUTH ROUTES
-// ======================================================
+// ==========================================
 
 app.use("/api/auth", authRoutes);
 
 
-// ======================================================
-// 404 HANDLER
-// ======================================================
+// ==========================================
+// 404
+// ==========================================
 
 app.use((req, res) => {
     res.status(404).json({
@@ -138,28 +120,26 @@ app.use((req, res) => {
 });
 
 
-// ======================================================
-// GLOBAL ERROR HANDLER
-// ======================================================
+// ==========================================
+// ERROR HANDLER
+// ==========================================
 
 app.use((error, req, res, next) => {
     console.error("❌ Server error:", error);
 
     res.status(500).json({
         success: false,
-        message: "Internal server error."
+        message: "Internal server error"
     });
 });
 
 
-// ======================================================
+// ==========================================
 // START SERVER
-// ======================================================
+// ==========================================
 
 app.listen(PORT, "0.0.0.0", () => {
-    console.log("==========================================");
-    console.log("🇸🇱 SaloneBiz Backend");
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
-    console.log("==========================================");
+    console.log(
+        `🇸🇱 SaloneBiz Backend running on port ${PORT}`
+    );
 });
