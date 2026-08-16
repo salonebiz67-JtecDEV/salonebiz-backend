@@ -6,9 +6,9 @@ const { pool } = require("../config/database");
 const router = express.Router();
 
 
-// ==========================================
+// ======================================================
 // PASSWORD HELPERS
-// ==========================================
+// ======================================================
 
 function hashPassword(password) {
     const salt = crypto.randomBytes(16).toString("hex");
@@ -23,6 +23,10 @@ function hashPassword(password) {
 
 function verifyPassword(password, storedPassword) {
     try {
+        if (!storedPassword || typeof storedPassword !== "string") {
+            return false;
+        }
+
         const parts = storedPassword.split(":");
 
         if (parts.length !== 2) {
@@ -36,22 +40,31 @@ function verifyPassword(password, storedPassword) {
             .scryptSync(password, salt, 64)
             .toString("hex");
 
+        const hashBuffer = Buffer.from(hash, "hex");
+        const storedHashBuffer = Buffer.from(storedHash, "hex");
+
+        if (hashBuffer.length !== storedHashBuffer.length) {
+            return false;
+        }
+
         return crypto.timingSafeEqual(
-            Buffer.from(hash, "hex"),
-            Buffer.from(storedHash, "hex")
+            hashBuffer,
+            storedHashBuffer
         );
+
     } catch (error) {
+        console.error("❌ Password verification error:", error);
         return false;
     }
 }
 
 
-// ==========================================
-// HEALTH CHECK
-// ==========================================
+// ======================================================
+// AUTH HEALTH
+// ======================================================
 
-router.get("/health", async (req, res) => {
-    res.json({
+router.get("/health", (req, res) => {
+    return res.json({
         success: true,
         service: "auth",
         status: "online"
@@ -59,20 +72,58 @@ router.get("/health", async (req, res) => {
 });
 
 
-// ==========================================
+// ======================================================
 // REGISTER
-// ==========================================
+// ======================================================
 
 router.post("/register", async (req, res) => {
     try {
-        const { name, email, password } = req.body;
 
-        if (!name || !email || !password) {
+        // IMPORTANT:
+        // Prevent req.body from being undefined
+        const body = req.body || {};
+
+        const name = body.name;
+        const email = body.email;
+        const password = body.password;
+
+
+        // ----------------------------------------------
+        // VALIDATE INPUT
+        // ----------------------------------------------
+
+        if (
+            typeof name !== "string" ||
+            typeof email !== "string" ||
+            typeof password !== "string"
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "Name, email and password are required"
+                message: "Name, email and password are required",
+                receivedBody: body
             });
         }
+
+
+        const cleanName = name.trim();
+        const normalizedEmail = email.trim().toLowerCase();
+
+
+        if (!cleanName) {
+            return res.status(400).json({
+                success: false,
+                message: "Name cannot be empty"
+            });
+        }
+
+
+        if (!normalizedEmail) {
+            return res.status(400).json({
+                success: false,
+                message: "Email cannot be empty"
+            });
+        }
+
 
         if (password.length < 6) {
             return res.status(400).json({
@@ -81,12 +132,35 @@ router.post("/register", async (req, res) => {
             });
         }
 
-        const normalizedEmail = email.trim().toLowerCase();
+
+        // ----------------------------------------------
+        // CHECK DATABASE
+        // ----------------------------------------------
+
+        if (!pool) {
+            console.error("❌ Database pool is not available");
+
+            return res.status(503).json({
+                success: false,
+                message: "Database service unavailable"
+            });
+        }
+
+
+        // ----------------------------------------------
+        // CHECK EXISTING USER
+        // ----------------------------------------------
 
         const existingUser = await pool.query(
-            "SELECT id FROM users WHERE email = $1 LIMIT 1",
+            `
+            SELECT id
+            FROM users
+            WHERE email = $1
+            LIMIT 1
+            `,
             [normalizedEmail]
         );
+
 
         if (existingUser.rows.length > 0) {
             return res.status(409).json({
@@ -95,7 +169,17 @@ router.post("/register", async (req, res) => {
             });
         }
 
+
+        // ----------------------------------------------
+        // HASH PASSWORD
+        // ----------------------------------------------
+
         const passwordHash = hashPassword(password);
+
+
+        // ----------------------------------------------
+        // CREATE USER
+        // ----------------------------------------------
 
         const result = await pool.query(
             `
@@ -103,14 +187,23 @@ router.post("/register", async (req, res) => {
                 (name, email, password_hash)
             VALUES
                 ($1, $2, $3)
-            RETURNING id, name, email, created_at
+            RETURNING
+                id,
+                name,
+                email,
+                created_at
             `,
             [
-                name.trim(),
+                cleanName,
                 normalizedEmail,
                 passwordHash
             ]
         );
+
+
+        // ----------------------------------------------
+        // SUCCESS
+        // ----------------------------------------------
 
         return res.status(201).json({
             success: true,
@@ -118,8 +211,19 @@ router.post("/register", async (req, res) => {
             user: result.rows[0]
         });
 
+
     } catch (error) {
+
         console.error("❌ Registration error:", error);
+
+        // PostgreSQL duplicate email protection
+        if (error.code === "23505") {
+            return res.status(409).json({
+                success: false,
+                message: "An account with this email already exists"
+            });
+        }
+
 
         return res.status(500).json({
             success: false,
@@ -129,22 +233,51 @@ router.post("/register", async (req, res) => {
 });
 
 
-// ==========================================
+// ======================================================
 // LOGIN
-// ==========================================
+// ======================================================
 
 router.post("/login", async (req, res) => {
     try {
-        const { email, password } = req.body;
 
-        if (!email || !password) {
+        // IMPORTANT:
+        // Prevent req.body from being undefined
+        const body = req.body || {};
+
+        const email = body.email;
+        const password = body.password;
+
+
+        // ----------------------------------------------
+        // VALIDATE INPUT
+        // ----------------------------------------------
+
+        if (
+            typeof email !== "string" ||
+            typeof password !== "string"
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Email and password are required",
+                receivedBody: body
+            });
+        }
+
+
+        const normalizedEmail = email.trim().toLowerCase();
+
+
+        if (!normalizedEmail || !password) {
             return res.status(400).json({
                 success: false,
                 message: "Email and password are required"
             });
         }
 
-        const normalizedEmail = email.trim().toLowerCase();
+
+        // ----------------------------------------------
+        // FIND USER
+        // ----------------------------------------------
 
         const result = await pool.query(
             `
@@ -161,6 +294,11 @@ router.post("/login", async (req, res) => {
             [normalizedEmail]
         );
 
+
+        // ----------------------------------------------
+        // USER NOT FOUND
+        // ----------------------------------------------
+
         if (result.rows.length === 0) {
             return res.status(401).json({
                 success: false,
@@ -168,12 +306,19 @@ router.post("/login", async (req, res) => {
             });
         }
 
+
         const user = result.rows[0];
+
+
+        // ----------------------------------------------
+        // VERIFY PASSWORD
+        // ----------------------------------------------
 
         const passwordCorrect = verifyPassword(
             password,
             user.password_hash
         );
+
 
         if (!passwordCorrect) {
             return res.status(401).json({
@@ -182,7 +327,14 @@ router.post("/login", async (req, res) => {
             });
         }
 
+
+        // Never send password hash to frontend
         delete user.password_hash;
+
+
+        // ----------------------------------------------
+        // LOGIN SUCCESS
+        // ----------------------------------------------
 
         return res.json({
             success: true,
@@ -190,7 +342,9 @@ router.post("/login", async (req, res) => {
             user
         });
 
+
     } catch (error) {
+
         console.error("❌ Login error:", error);
 
         return res.status(500).json({
@@ -201,31 +355,43 @@ router.post("/login", async (req, res) => {
 });
 
 
-// ==========================================
-// TEST DATABASE THROUGH AUTH
-// ==========================================
+// ======================================================
+// DATABASE TEST
+// ======================================================
 
 router.get("/database-test", async (req, res) => {
     try {
+
         const result = await pool.query(
             "SELECT NOW() AS time"
         );
 
-        res.json({
+
+        return res.json({
             success: true,
             database: "connected",
             time: result.rows[0].time
         });
 
-    } catch (error) {
-        console.error("❌ Auth database test failed:", error);
 
-        res.status(503).json({
+    } catch (error) {
+
+        console.error(
+            "❌ Auth database test failed:",
+            error
+        );
+
+
+        return res.status(503).json({
             success: false,
             database: "disconnected"
         });
     }
 });
 
+
+// ======================================================
+// EXPORT
+// ======================================================
 
 module.exports = router;
