@@ -1,7 +1,7 @@
 {
   "name": "salonebiz-backend",
-  "version": "0.1.0",
-  "description": "Backend API for SaloneBiz - Sierra Leone business ordering platform",
+  "version": "0.2.0",
+  "description": "Backend API for SaloneBiz - Sierra Leone business ordering and social platform",
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
@@ -16,7 +16,7 @@
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
     "helmet": "^8.1.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
     "pg": "^8.16.3"
   }
 }
