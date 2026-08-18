@@ -1,15 +1,16 @@
-const postsRoutes = require("./routes/posts");
-const usersRoutes = require("./routes/users");
-const friendsRoutes = require("./routes/friends");
-const interactionsRoutes = require("./routes/interactions");
-const messagesRoutes = require("./routes/messages");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 require("dotenv").config();
 
 const { checkDatabaseConnection } = require("./config/database");
+
 const authRoutes = require("./routes/auth");
+const postsRoutes = require("./routes/posts");
+const usersRoutes = require("./routes/users");
+const friendsRoutes = require("./routes/friends");
+const interactionsRoutes = require("./routes/interactions");
+const messagesRoutes = require("./routes/messages");
 
 const app = express();
 
@@ -50,9 +51,6 @@ app.use(
 // BODY PARSERS
 // ======================================================
 
-// IMPORTANT:
-// These MUST come before API routes.
-
 app.use(
     express.json({
         limit: "1mb"
@@ -70,9 +68,6 @@ app.use(
 // ======================================================
 // REQUEST LOGGER
 // ======================================================
-
-// Logs request information WITHOUT logging passwords
-// or the complete request body.
 
 app.use((req, res, next) => {
     console.log(
@@ -97,13 +92,13 @@ app.get("/", (req, res) => {
         success: true,
         app: "SaloneBiz",
         message: "SaloneBiz Backend is running 🇸🇱",
-        version: "0.2.0"
+        version: "0.3.0"
     });
 });
 
 
 // ======================================================
-// BASIC HEALTH
+// HEALTH
 // ======================================================
 
 app.get("/api/health", async (req, res) => {
@@ -116,7 +111,7 @@ app.get("/api/health", async (req, res) => {
             status: "healthy",
             database: "connected",
             service: "salonebiz-backend",
-            version: "0.2.0",
+            version: "0.3.0",
             timestamp: new Date().toISOString()
         });
 
@@ -132,7 +127,7 @@ app.get("/api/health", async (req, res) => {
             status: "unhealthy",
             database: "disconnected",
             service: "salonebiz-backend",
-            version: "0.2.0",
+            version: "0.3.0",
             timestamp: new Date().toISOString()
         });
     }
@@ -140,7 +135,7 @@ app.get("/api/health", async (req, res) => {
 
 
 // ======================================================
-// AUTH ROUTES
+// AUTH
 // ======================================================
 
 app.use(
@@ -150,10 +145,47 @@ app.use(
 
 
 // ======================================================
-// JSON BODY PARSER ERROR
+// SOCIAL ROUTES
 // ======================================================
 
-// Handles malformed JSON instead of crashing.
+// 🏠 Posts / Home feed
+app.use(
+    "/api/posts",
+    postsRoutes
+);
+
+
+// 👤 Users / Profiles / Search
+app.use(
+    "/api/users",
+    usersRoutes
+);
+
+
+// 👥 Friends / Following
+app.use(
+    "/api/friends",
+    friendsRoutes
+);
+
+
+// ❤️ Likes / ⭐ Favorites / Comments
+app.use(
+    "/api/interactions",
+    interactionsRoutes
+);
+
+
+// 💬 Messages / Inbox
+app.use(
+    "/api/messages",
+    messagesRoutes
+);
+
+
+// ======================================================
+// JSON BODY PARSER ERROR
+// ======================================================
 
 app.use((error, req, res, next) => {
 
