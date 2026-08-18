@@ -5,6 +5,7 @@ require("dotenv").config();
 
 const { checkDatabaseConnection } = require("./config/database");
 
+// Routes
 const authRoutes = require("./routes/auth");
 const postsRoutes = require("./routes/posts");
 const usersRoutes = require("./routes/users");
@@ -70,13 +71,9 @@ app.use(
 // ======================================================
 
 app.use((req, res, next) => {
-    console.log(
-        `➡️ ${req.method} ${req.originalUrl}`
-    );
 
     console.log(
-        "Content-Type:",
-        req.headers["content-type"] || "none"
+        `➡️ ${req.method} ${req.originalUrl}`
     );
 
     next();
@@ -88,6 +85,7 @@ app.use((req, res, next) => {
 // ======================================================
 
 app.get("/", (req, res) => {
+
     res.status(200).json({
         success: true,
         app: "SaloneBiz",
@@ -102,11 +100,12 @@ app.get("/", (req, res) => {
 // ======================================================
 
 app.get("/api/health", async (req, res) => {
+
     try {
 
         await checkDatabaseConnection();
 
-        return res.status(200).json({
+        res.status(200).json({
             success: true,
             status: "healthy",
             database: "connected",
@@ -122,7 +121,7 @@ app.get("/api/health", async (req, res) => {
             error.message
         );
 
-        return res.status(503).json({
+        res.status(503).json({
             success: false,
             status: "unhealthy",
             database: "disconnected",
@@ -145,38 +144,49 @@ app.use(
 
 
 // ======================================================
-// SOCIAL ROUTES
+// USERS
 // ======================================================
 
-// 🏠 Posts / Home feed
-app.use(
-    "/api/posts",
-    postsRoutes
-);
-
-
-// 👤 Users / Profiles / Search
 app.use(
     "/api/users",
     usersRoutes
 );
 
 
-// 👥 Friends / Following
+// ======================================================
+// POSTS
+// ======================================================
+
+app.use(
+    "/api/posts",
+    postsRoutes
+);
+
+
+// ======================================================
+// FRIENDS
+// ======================================================
+
 app.use(
     "/api/friends",
     friendsRoutes
 );
 
 
-// ❤️ Likes / ⭐ Favorites / Comments
+// ======================================================
+// INTERACTIONS
+// ======================================================
+
 app.use(
     "/api/interactions",
     interactionsRoutes
 );
 
 
-// 💬 Messages / Inbox
+// ======================================================
+// MESSAGES / INBOX
+// ======================================================
+
 app.use(
     "/api/messages",
     messagesRoutes
@@ -184,7 +194,7 @@ app.use(
 
 
 // ======================================================
-// JSON BODY PARSER ERROR
+// JSON ERROR
 // ======================================================
 
 app.use((error, req, res, next) => {
@@ -194,6 +204,7 @@ app.use((error, req, res, next) => {
         error.status === 400 &&
         "body" in error
     ) {
+
         return res.status(400).json({
             success: false,
             message: "Invalid JSON request body"
@@ -210,7 +221,7 @@ app.use((error, req, res, next) => {
 
 app.use((req, res) => {
 
-    return res.status(404).json({
+    res.status(404).json({
         success: false,
         message: "Route not found",
         path: req.originalUrl
@@ -219,7 +230,7 @@ app.use((req, res) => {
 
 
 // ======================================================
-// GLOBAL ERROR HANDLER
+// GLOBAL ERROR
 // ======================================================
 
 app.use((error, req, res, next) => {
@@ -233,7 +244,7 @@ app.use((error, req, res, next) => {
         return next(error);
     }
 
-    return res.status(500).json({
+    res.status(500).json({
         success: false,
         message: "Internal server error"
     });
