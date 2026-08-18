@@ -5,13 +5,21 @@ require("dotenv").config();
 
 const { checkDatabaseConnection } = require("./config/database");
 
-// Routes
+// ======================================================
+// ROUTES
+// ======================================================
+
 const authRoutes = require("./routes/auth");
 const postsRoutes = require("./routes/posts");
 const usersRoutes = require("./routes/users");
 const friendsRoutes = require("./routes/friends");
 const interactionsRoutes = require("./routes/interactions");
 const messagesRoutes = require("./routes/messages");
+
+
+// ======================================================
+// APP
+// ======================================================
 
 const app = express();
 
@@ -32,6 +40,7 @@ app.use(helmet());
 app.use(
     cors({
         origin: "*",
+
         methods: [
             "GET",
             "POST",
@@ -40,6 +49,7 @@ app.use(
             "DELETE",
             "OPTIONS"
         ],
+
         allowedHeaders: [
             "Content-Type",
             "Authorization"
@@ -105,7 +115,7 @@ app.get("/api/health", async (req, res) => {
 
         await checkDatabaseConnection();
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             status: "healthy",
             database: "connected",
@@ -121,7 +131,7 @@ app.get("/api/health", async (req, res) => {
             error.message
         );
 
-        res.status(503).json({
+        return res.status(503).json({
             success: false,
             status: "unhealthy",
             database: "disconnected",
@@ -144,49 +154,38 @@ app.use(
 
 
 // ======================================================
-// USERS
+// SOCIAL API
 // ======================================================
 
+// 👤 Profiles + Search
 app.use(
     "/api/users",
     usersRoutes
 );
 
 
-// ======================================================
-// POSTS
-// ======================================================
-
+// 🏠 Posts + Home Feed
 app.use(
     "/api/posts",
     postsRoutes
 );
 
 
-// ======================================================
-// FRIENDS
-// ======================================================
-
+// 👥 Follow / Unfollow
 app.use(
     "/api/friends",
     friendsRoutes
 );
 
 
-// ======================================================
-// INTERACTIONS
-// ======================================================
-
+// ❤️ Likes / ⭐ Favorites / 💬 Comments / Share
 app.use(
     "/api/interactions",
     interactionsRoutes
 );
 
 
-// ======================================================
-// MESSAGES / INBOX
-// ======================================================
-
+// 💬 Inbox / Messages
 app.use(
     "/api/messages",
     messagesRoutes
@@ -194,7 +193,7 @@ app.use(
 
 
 // ======================================================
-// JSON ERROR
+// INVALID JSON HANDLER
 // ======================================================
 
 app.use((error, req, res, next) => {
@@ -221,7 +220,7 @@ app.use((error, req, res, next) => {
 
 app.use((req, res) => {
 
-    res.status(404).json({
+    return res.status(404).json({
         success: false,
         message: "Route not found",
         path: req.originalUrl
@@ -230,7 +229,7 @@ app.use((req, res) => {
 
 
 // ======================================================
-// GLOBAL ERROR
+// GLOBAL ERROR HANDLER
 // ======================================================
 
 app.use((error, req, res, next) => {
@@ -244,7 +243,7 @@ app.use((error, req, res, next) => {
         return next(error);
     }
 
-    res.status(500).json({
+    return res.status(500).json({
         success: false,
         message: "Internal server error"
     });
@@ -266,7 +265,7 @@ app.listen(
 
         console.log(
             `🌐 Environment: ${
-                process.env.NODE_ENV || "development"
+                process.env.NODE_ENV || "production"
             }`
         );
     }
