@@ -1,7 +1,7 @@
 -- ============================================================
 -- 🇸🇱 SALONEBIZ DATABASE
--- Initial Schema - Version 0.1.0
--- Safe / Repeatable Migration
+-- Initial Schema - Version 0.2.0
+-- Complete / Safe / Repeatable Migration
 -- ============================================================
 
 -- ============================================================
@@ -35,11 +35,13 @@ CREATE TABLE IF NOT EXISTS public.users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     CONSTRAINT users_role_check
-        CHECK (role IN (
-            'CUSTOMER',
-            'BUSINESS_OWNER',
-            'ADMIN'
-        ))
+        CHECK (
+            role IN (
+                'CUSTOMER',
+                'BUSINESS_OWNER',
+                'ADMIN'
+            )
+        )
 );
 
 
@@ -113,6 +115,27 @@ CREATE TABLE IF NOT EXISTS public.products (
 
     CONSTRAINT products_price_check
         CHECK (price >= 0)
+);
+
+
+-- ============================================================
+-- POSTS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.posts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    user_id UUID NOT NULL
+        REFERENCES public.users(id)
+        ON DELETE CASCADE,
+
+    caption TEXT,
+
+    image_url TEXT,
+
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 
@@ -241,7 +264,6 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 
 -- ============================================================
 -- DEVICE TOKENS
--- Used later for push notifications
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS public.device_tokens (
@@ -273,11 +295,20 @@ CREATE INDEX IF NOT EXISTS idx_businesses_owner
 CREATE INDEX IF NOT EXISTS idx_businesses_category
     ON public.businesses(category);
 
+
 CREATE INDEX IF NOT EXISTS idx_products_business
     ON public.products(business_id);
 
 CREATE INDEX IF NOT EXISTS idx_products_available
     ON public.products(is_available);
+
+
+CREATE INDEX IF NOT EXISTS idx_posts_user
+    ON public.posts(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_posts_created
+    ON public.posts(created_at DESC);
+
 
 CREATE INDEX IF NOT EXISTS idx_orders_customer
     ON public.orders(customer_id);
@@ -288,11 +319,13 @@ CREATE INDEX IF NOT EXISTS idx_orders_business
 CREATE INDEX IF NOT EXISTS idx_orders_status
     ON public.orders(status);
 
+
 CREATE INDEX IF NOT EXISTS idx_notifications_user
     ON public.notifications(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_notifications_read
     ON public.notifications(is_read);
+
 
 CREATE INDEX IF NOT EXISTS idx_device_tokens_user
     ON public.device_tokens(user_id);
