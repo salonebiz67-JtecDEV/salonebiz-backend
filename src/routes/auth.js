@@ -7,28 +7,34 @@ const { pool } = require("../config/database");
 const router = express.Router();
 
 
-// ==========================================
-// JWT TOKEN
-// ==========================================
+// ======================================================
+// JWT
+// ======================================================
 
 function createToken(user) {
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+        throw new Error("JWT_SECRET is not configured");
+    }
+
     return jwt.sign(
         {
             id: user.id,
             email: user.email,
             role: user.role
         },
-        process.env.JWT_SECRET,
+        secret,
         {
-            expiresIn: process.env.JWT_EXPIRES_IN || "7d"
+            expiresIn: "30d"
         }
     );
 }
 
 
-// ==========================================
+// ======================================================
 // PASSWORD HELPERS
-// ==========================================
+// ======================================================
 
 function hashPassword(password) {
     const salt = crypto.randomBytes(16).toString("hex");
@@ -60,8 +66,15 @@ function verifyPassword(password, storedPassword) {
             .scryptSync(password, salt, 64)
             .toString("hex");
 
-        const storedBuffer = Buffer.from(storedHash, "hex");
-        const hashBuffer = Buffer.from(hash, "hex");
+        const storedBuffer = Buffer.from(
+            storedHash,
+            "hex"
+        );
+
+        const hashBuffer = Buffer.from(
+            hash,
+            "hex"
+        );
 
         if (storedBuffer.length !== hashBuffer.length) {
             return false;
@@ -78,9 +91,9 @@ function verifyPassword(password, storedPassword) {
 }
 
 
-// ==========================================
-// AUTH HEALTH
-// ==========================================
+// ======================================================
+// HEALTH
+// ======================================================
 
 router.get("/health", (req, res) => {
     res.json({
@@ -91,9 +104,9 @@ router.get("/health", (req, res) => {
 });
 
 
-// ==========================================
+// ======================================================
 // REGISTER
-// ==========================================
+// ======================================================
 
 router.post("/register", async (req, res) => {
     try {
@@ -106,14 +119,11 @@ router.post("/register", async (req, res) => {
         } = req.body || {};
 
 
-        // --------------------------------------
-        // VALIDATION
-        // --------------------------------------
-
         if (!name || !phone || !email || !password) {
             return res.status(400).json({
                 success: false,
-                message: "Name, phone, email and password are required"
+                message:
+                    "Name, phone, email and password are required"
             });
         }
 
@@ -121,7 +131,8 @@ router.post("/register", async (req, res) => {
         if (password.length < 6) {
             return res.status(400).json({
                 success: false,
-                message: "Password must contain at least 6 characters"
+                message:
+                    "Password must contain at least 6 characters"
             });
         }
 
@@ -133,19 +144,24 @@ router.post("/register", async (req, res) => {
             .toLowerCase();
 
 
-        if (!cleanName || !cleanPhone || !normalizedEmail) {
+        if (
+            !cleanName ||
+            !cleanPhone ||
+            !normalizedEmail
+        ) {
             return res.status(400).json({
                 success: false,
-                message: "Name, phone and email cannot be empty"
+                message:
+                    "Name, phone and email cannot be empty"
             });
         }
 
 
-        // --------------------------------------
+        // ------------------------------------------
         // CHECK EMAIL
-        // --------------------------------------
+        // ------------------------------------------
 
-        const existingUser = await pool.query(
+        const existingEmail = await pool.query(
             `
             SELECT id
             FROM users
@@ -156,17 +172,18 @@ router.post("/register", async (req, res) => {
         );
 
 
-        if (existingUser.rows.length > 0) {
+        if (existingEmail.rows.length > 0) {
             return res.status(409).json({
                 success: false,
-                message: "An account with this email already exists"
+                message:
+                    "An account with this email already exists"
             });
         }
 
 
-        // --------------------------------------
+        // ------------------------------------------
         // CHECK PHONE
-        // --------------------------------------
+        // ------------------------------------------
 
         const existingPhone = await pool.query(
             `
@@ -182,21 +199,22 @@ router.post("/register", async (req, res) => {
         if (existingPhone.rows.length > 0) {
             return res.status(409).json({
                 success: false,
-                message: "An account with this phone number already exists"
+                message:
+                    "An account with this phone number already exists"
             });
         }
 
 
-        // --------------------------------------
-        // HASH PASSWORD
-        // --------------------------------------
+        // ------------------------------------------
+        // CREATE PASSWORD HASH
+        // ------------------------------------------
 
         const passwordHash = hashPassword(password);
 
 
-        // --------------------------------------
+        // ------------------------------------------
         // CREATE USER
-        // --------------------------------------
+        // ------------------------------------------
 
         const result = await pool.query(
             `
@@ -209,12 +227,14 @@ router.post("/register", async (req, res) => {
                 )
             VALUES
                 ($1, $2, $3, $4)
+
             RETURNING
                 id,
                 name,
                 phone,
                 email,
                 role,
+                is_active,
                 created_at
             `,
             [
@@ -226,16 +246,30 @@ router.post("/register", async (req, res) => {
         );
 
 
+        const user = result.rows[0];
+
+
+        // ------------------------------------------
+        // CREATE JWT
+        // ------------------------------------------
+
+        const token = createToken(user);
+
+
         return res.status(201).json({
             success: true,
             message: "Account created successfully",
-            user: result.rows[0]
+            token,
+            user
         });
 
 
     } catch (error) {
 
-        console.error("❌ Registration error:", error);
+        console.error(
+            "❌ Registration error:",
+            error
+        );
 
         return res.status(500).json({
             success: false,
@@ -245,9 +279,9 @@ router.post("/register", async (req, res) => {
 });
 
 
-// ==========================================
+// ======================================================
 // LOGIN
-// ==========================================
+// ======================================================
 
 router.post("/login", async (req, res) => {
     try {
@@ -258,14 +292,11 @@ router.post("/login", async (req, res) => {
         } = req.body || {};
 
 
-        // --------------------------------------
-        // VALIDATION
-        // --------------------------------------
-
         if (!email || !password) {
             return res.status(400).json({
                 success: false,
-                message: "Email and password are required"
+                message:
+                    "Email and password are required"
             });
         }
 
@@ -274,10 +305,6 @@ router.post("/login", async (req, res) => {
             .trim()
             .toLowerCase();
 
-
-        // --------------------------------------
-        // FIND USER
-        // --------------------------------------
 
         const result = await pool.query(
             `
@@ -301,7 +328,8 @@ router.post("/login", async (req, res) => {
         if (result.rows.length === 0) {
             return res.status(401).json({
                 success: false,
-                message: "Invalid email or password"
+                message:
+                    "Invalid email or password"
             });
         }
 
@@ -309,66 +337,63 @@ router.post("/login", async (req, res) => {
         const user = result.rows[0];
 
 
-        // --------------------------------------
+        // ------------------------------------------
         // CHECK ACTIVE ACCOUNT
-        // --------------------------------------
+        // ------------------------------------------
 
         if (user.is_active === false) {
             return res.status(403).json({
                 success: false,
-                message: "This account is inactive"
+                message:
+                    "This account has been disabled"
             });
         }
 
 
-        // --------------------------------------
+        // ------------------------------------------
         // VERIFY PASSWORD
-        // --------------------------------------
+        // ------------------------------------------
 
-        const passwordCorrect = verifyPassword(
-            password,
-            user.password_hash
-        );
+        const passwordCorrect =
+            verifyPassword(
+                password,
+                user.password_hash
+            );
 
 
         if (!passwordCorrect) {
             return res.status(401).json({
                 success: false,
-                message: "Invalid email or password"
+                message:
+                    "Invalid email or password"
             });
         }
 
 
-        // --------------------------------------
-        // REMOVE PASSWORD HASH
-        // --------------------------------------
-
         delete user.password_hash;
 
 
-        // --------------------------------------
+        // ------------------------------------------
         // CREATE JWT
-        // --------------------------------------
+        // ------------------------------------------
 
         const token = createToken(user);
 
-
-        // --------------------------------------
-        // LOGIN SUCCESS
-        // --------------------------------------
 
         return res.json({
             success: true,
             message: "Login successful",
             token,
-            expiresIn: process.env.JWT_EXPIRES_IN || "7d",
             user
         });
 
 
     } catch (error) {
 
-        console.error("❌ Login error:", error);
+        console.error(
+            "❌ Login error:",
+            error
+        );
 
         return res.status(500).json({
             success: false,
@@ -378,39 +403,43 @@ router.post("/login", async (req, res) => {
 });
 
 
-// ==========================================
+// ======================================================
 // DATABASE TEST
-// ==========================================
+// ======================================================
 
-router.get("/database-test", async (req, res) => {
-    try {
+router.get(
+    "/database-test",
+    async (req, res) => {
 
-        const result = await pool.query(
-            "SELECT NOW() AS time"
-        );
+        try {
 
-
-        return res.json({
-            success: true,
-            database: "connected",
-            time: result.rows[0].time
-        });
+            const result = await pool.query(
+                "SELECT NOW() AS time"
+            );
 
 
-    } catch (error) {
+            return res.json({
+                success: true,
+                database: "connected",
+                time: result.rows[0].time
+            });
 
-        console.error(
-            "❌ Auth database test failed:",
-            error
-        );
+
+        } catch (error) {
+
+            console.error(
+                "❌ Auth database test failed:",
+                error
+            );
 
 
-        return res.status(503).json({
-            success: false,
-            database: "disconnected"
-        });
+            return res.status(503).json({
+                success: false,
+                database: "disconnected"
+            });
+        }
     }
-});
+);
 
 
 module.exports = router;
