@@ -1,3 +1,15 @@
+const authModule = require("../middleware/auth");
+
+const authMiddleware =
+    typeof authModule === "function"
+        ? authModule
+        : authModule.authMiddleware || authModule.default;
+
+if (typeof authMiddleware !== "function") {
+    throw new TypeError(
+        "authMiddleware must export a function"
+    );
+}
 const authMiddleware = require("../middleware/auth");
 const express = require("express");
 const { pool } = require("../config/database");
