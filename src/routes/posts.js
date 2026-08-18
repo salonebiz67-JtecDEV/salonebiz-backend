@@ -1,16 +1,3 @@
-const authModule = require("../middleware/auth");
-
-const authMiddleware =
-    typeof authModule === "function"
-        ? authModule
-        : authModule.authMiddleware || authModule.default;
-
-if (typeof authMiddleware !== "function") {
-    throw new TypeError(
-        "authMiddleware must export a function"
-    );
-}
-const authMiddleware = require("../middleware/auth");
 const express = require("express");
 const { pool } = require("../config/database");
 const authMiddleware = require("../middleware/auth");
@@ -47,7 +34,10 @@ router.post("/", authMiddleware, async (req, res) => {
             });
         }
 
-        if (typeof image !== "string" || image.trim().length === 0) {
+        if (
+            typeof image !== "string" ||
+            image.trim().length === 0
+        ) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid image URL"
@@ -129,7 +119,6 @@ router.post("/", authMiddleware, async (req, res) => {
         });
 
     } catch (error) {
-
         console.error(
             "❌ Create post error:",
             error
@@ -150,7 +139,6 @@ router.post("/", authMiddleware, async (req, res) => {
 
 router.get("/feed", async (req, res) => {
     try {
-
         const page = Math.max(
             parseInt(req.query.page, 10) || 1,
             1
@@ -165,10 +153,6 @@ router.get("/feed", async (req, res) => {
         );
 
         const offset = (page - 1) * limit;
-
-        // --------------------------------------------------
-        // GET POSTS
-        // --------------------------------------------------
 
         const result = await pool.query(
             `
@@ -207,7 +191,6 @@ router.get("/feed", async (req, res) => {
         });
 
     } catch (error) {
-
         console.error(
             "❌ Feed error:",
             error
@@ -228,7 +211,6 @@ router.get("/feed", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
     try {
-
         const { id } = req.params;
 
         const result = await pool.query(
@@ -268,7 +250,6 @@ router.get("/:id", async (req, res) => {
         });
 
     } catch (error) {
-
         console.error(
             "❌ Get post error:",
             error
@@ -287,57 +268,56 @@ router.get("/:id", async (req, res) => {
 // DELETE /api/posts/:id
 // ======================================================
 
-router.delete("/:id", authMiddleware, async (req, res) => {
-    try {
+router.delete(
+    "/:id",
+    authMiddleware,
+    async (req, res) => {
+        try {
+            const userId = req.user.id;
+            const { id } = req.params;
 
-        const userId = req.user.id;
-        const { id } = req.params;
+            const result = await pool.query(
+                `
+                DELETE FROM posts
 
-        // --------------------------------------------------
-        // DELETE ONLY IF USER OWNS POST
-        // --------------------------------------------------
+                WHERE id = $1
+                  AND user_id = $2
 
-        const result = await pool.query(
-            `
-            DELETE FROM posts
+                RETURNING id
+                `,
+                [
+                    id,
+                    userId
+                ]
+            );
 
-            WHERE id = $1
-              AND user_id = $2
+            if (result.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message:
+                        "Post not found or you do not own this post"
+                });
+            }
 
-            RETURNING id
-            `,
-            [
-                id,
-                userId
-            ]
-        );
+            return res.json({
+                success: true,
+                message: "Post deleted successfully",
+                post_id: result.rows[0].id
+            });
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({
+        } catch (error) {
+            console.error(
+                "❌ Delete post error:",
+                error
+            );
+
+            return res.status(500).json({
                 success: false,
-                message: "Post not found or you do not own this post"
+                message: "Unable to delete post"
             });
         }
-
-        return res.json({
-            success: true,
-            message: "Post deleted successfully",
-            post_id: result.rows[0].id
-        });
-
-    } catch (error) {
-
-        console.error(
-            "❌ Delete post error:",
-            error
-        );
-
-        return res.status(500).json({
-            success: false,
-            message: "Unable to delete post"
-        });
     }
-});
+);
 
 
 module.exports = router;
