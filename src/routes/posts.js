@@ -1,87 +1,47 @@
 const express = require("express");
-
 const { pool } = require("../config/database");
-const { requireAuth } = require("../middleware/auth");
+const auth = require("../middleware/auth");
 
 const router = express.Router();
 
 
 // ==========================================
-// CREATE POST
-// IMAGE ONLY
+// GET HOME FEED
 // ==========================================
 
-router.post("/", requireAuth, async (req, res) => {
+router.get("/", auth, async (req, res) => {
     try {
-        const {
-            image_url,
-            caption,
-            location
-        } = req.body;
 
-        if (!image_url) {
-            return res.status(400).json({
-                success: false,
-                message: "Image URL is required"
-            });
-        }
-
-        const result = await pool.query(
-            `
-            INSERT INTO posts
-                (user_id, image_url, caption, location)
-            VALUES
-                ($1, $2, $3, $4)
-            RETURNING *
-            `,
-            [
-                req.user.id,
-                image_url,
-                caption || null,
-                location || null
-            ]
-        );
-
-        res.status(201).json({
-            success: true,
-            message: "Post created successfully",
-            post: result.rows[0]
-        });
-
-    } catch (error) {
-        console.error("Create post error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Unable to create post"
-        });
-    }
-});
-
-
-// ==========================================
-// HOME FEED
-// ==========================================
-
-router.get("/feed", requireAuth, async (req, res) => {
-    try {
-        const result = await pool.query(
-            `
+        const result = await pool.query(`
             SELECT
                 p.id,
+                p.user_id,
+                p.business_name,
+                p.description,
                 p.image_url,
-                p.caption,
                 p.location,
                 p.created_at,
 
-                u.id AS user_id,
                 u.name AS user_name,
                 u.email AS user_email,
 
-                COUNT(DISTINCT l.id)::INTEGER AS likes,
-                COUNT(DISTINCT f.id)::INTEGER AS favorites,
-                COUNT(DISTINCT s.id)::INTEGER AS shares,
-                COUNT(DISTINCT c.id)::INTEGER AS comments
+                COUNT(DISTINCT l.id)::int AS likes_count,
+                COUNT(DISTINCT f.id)::int AS favorites_count,
+                COUNT(DISTINCT c.id)::int AS comments_count,
+
+                EXISTS (
+                    SELECT 1
+                    FROM post_likes pl
+                    WHERE pl.post_id = p.id
+                    AND pl.user_id = $1
+                ) AS liked,
+
+                EXISTS (
+                    SELECT 1
+                    FROM post_favorites pf
+                    WHERE pf.post_id = p.id
+                    AND pf.user_id = $1
+                ) AS favorited
 
             FROM posts p
 
@@ -94,9 +54,6 @@ router.get("/feed", requireAuth, async (req, res) => {
             LEFT JOIN post_favorites f
                 ON f.post_id = p.id
 
-            LEFT JOIN post_shares s
-                ON s.post_id = p.id
-
             LEFT JOIN comments c
                 ON c.post_id = p.id
 
@@ -104,12 +61,8 @@ router.get("/feed", requireAuth, async (req, res) => {
                 p.id,
                 u.id
 
-            ORDER BY
-                p.created_at DESC
-
-            LIMIT 50
-            `
-        );
+            ORDER BY p.created_at DESC
+        `, [req.user.id]);
 
         res.json({
             success: true,
@@ -117,66 +70,78 @@ router.get("/feed", requireAuth, async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Feed error:", error);
+
+        console.error("Get posts error:", error);
 
         res.status(500).json({
             success: false,
-            message: "Unable to load feed"
+            message: "Unable to load posts"
         });
     }
 });
 
 
 // ==========================================
-// MY POSTS
+// CREATE POST
 // ==========================================
 
-router.get("/mine", requireAuth, async (req, res) => {
+router.post("/", auth, async (req, res) => {
     try {
-        const result = await pool.query(
-            `
-            SELECT
-                p.*,
 
-                COUNT(DISTINCT l.id)::INTEGER AS likes,
-                COUNT(DISTINCT f.id)::INTEGER AS favorites,
-                COUNT(DISTINCT s.id)::INTEGER AS shares,
-                COUNT(DISTINCT c.id)::INTEGER AS comments
+        const {
+            business_name,
+            description,
+            image_url,
+            location
+        } = req.body || {};
 
-            FROM posts p
+        if (!business_name || !image_url) {
+            return res.status(400).json({
+                success: false,
+                message: "Business name and image are required"
+            });
+        }
 
-            LEFT JOIN post_likes l
-                ON l.post_id = p.id
+        const result = await pool.query(`
+            INSERT INTO posts
+            (
+                user_id,
+                business_name,
+                description,
+                image_url,
+                location
+            )
+            VALUES ($1, $2, $3, $4, $5)
 
-            LEFT JOIN post_favorites f
-                ON f.post_id = p.id
+            RETURNING
+                id,
+                user_id,
+                business_name,
+                description,
+                image_url,
+                location,
+                created_at
+        `, [
+            req.user.id,
+            String(business_name).trim(),
+            description || null,
+            String(image_url).trim(),
+            location || null
+        ]);
 
-            LEFT JOIN post_shares s
-                ON s.post_id = p.id
-
-            LEFT JOIN comments c
-                ON c.post_id = p.id
-
-            WHERE p.user_id = $1
-
-            GROUP BY p.id
-
-            ORDER BY p.created_at DESC
-            `,
-            [req.user.id]
-        );
-
-        res.json({
+        res.status(201).json({
             success: true,
-            posts: result.rows
+            message: "Post created successfully",
+            post: result.rows[0]
         });
 
     } catch (error) {
-        console.error("My posts error:", error);
+
+        console.error("Create post error:", error);
 
         res.status(500).json({
             success: false,
-            message: "Unable to load your posts"
+            message: "Unable to create post"
         });
     }
 });
@@ -186,20 +151,18 @@ router.get("/mine", requireAuth, async (req, res) => {
 // DELETE MY POST
 // ==========================================
 
-router.delete("/:id", requireAuth, async (req, res) => {
+router.delete("/:postId", auth, async (req, res) => {
     try {
-        const result = await pool.query(
-            `
+
+        const result = await pool.query(`
             DELETE FROM posts
             WHERE id = $1
             AND user_id = $2
             RETURNING id
-            `,
-            [
-                req.params.id,
-                req.user.id
-            ]
-        );
+        `, [
+            req.params.postId,
+            req.user.id
+        ]);
 
         if (result.rows.length === 0) {
             return res.status(404).json({
@@ -210,10 +173,11 @@ router.delete("/:id", requireAuth, async (req, res) => {
 
         res.json({
             success: true,
-            message: "Post deleted successfully"
+            message: "Post deleted"
         });
 
     } catch (error) {
+
         console.error("Delete post error:", error);
 
         res.status(500).json({
