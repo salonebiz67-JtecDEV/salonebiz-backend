@@ -1,78 +1,37 @@
 const jwt = require("jsonwebtoken");
 
-
-// ======================================================
-// AUTHENTICATION MIDDLEWARE
-// ======================================================
-
 function authMiddleware(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader) {
+        return res.status(401).json({
+            success: false,
+            message: "Authentication required"
+        });
+    }
+
+    const [scheme, token] = authHeader.split(" ");
+
+    if (scheme !== "Bearer" || !token) {
+        return res.status(401).json({
+            success: false,
+            message: "Invalid authorization format"
+        });
+    }
+
+    const secret = process.env.JWT_SECRET;
+
+    if (!secret) {
+        console.error("❌ JWT_SECRET is not configured");
+
+        return res.status(500).json({
+            success: false,
+            message: "Authentication system is not configured"
+        });
+    }
+
     try {
-
-        const authHeader = req.headers.authorization;
-
-        // ------------------------------------------
-        // CHECK AUTHORIZATION HEADER
-        // ------------------------------------------
-
-        if (!authHeader) {
-            return res.status(401).json({
-                success: false,
-                message: "Authentication required"
-            });
-        }
-
-
-        // Expected:
-        // Authorization: Bearer TOKEN
-
-        const parts = authHeader.split(" ");
-
-        if (
-            parts.length !== 2 ||
-            parts[0] !== "Bearer" ||
-            !parts[1]
-        ) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid authorization format"
-            });
-        }
-
-
-        const token = parts[1];
-
-
-        // ------------------------------------------
-        // JWT SECRET
-        // ------------------------------------------
-
-        const secret = process.env.JWT_SECRET;
-
-        if (!secret) {
-            console.error(
-                "❌ JWT_SECRET is not configured"
-            );
-
-            return res.status(500).json({
-                success: false,
-                message: "Authentication system is not configured"
-            });
-        }
-
-
-        // ------------------------------------------
-        // VERIFY TOKEN
-        // ------------------------------------------
-
-        const decoded = jwt.verify(
-            token,
-            secret
-        );
-
-
-        // ------------------------------------------
-        // CHECK USER ID
-        // ------------------------------------------
+        const decoded = jwt.verify(token, secret);
 
         if (!decoded || !decoded.id) {
             return res.status(401).json({
@@ -81,51 +40,27 @@ function authMiddleware(req, res, next) {
             });
         }
 
-
-        // ------------------------------------------
-        // ATTACH USER
-        // ------------------------------------------
-
         req.user = {
             id: decoded.id
         };
 
-
-        next();
+        return next();
 
     } catch (error) {
+        console.error("❌ Authentication error:", error.message);
 
-        console.error(
-            "❌ Authentication error:",
-            error.message
-        );
-
-        if (
-            error.name === "TokenExpiredError"
-        ) {
+        if (error.name === "TokenExpiredError") {
             return res.status(401).json({
                 success: false,
                 message: "Authentication token expired"
             });
         }
 
-
-        if (
-            error.name === "JsonWebTokenError"
-        ) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid authentication token"
-            });
-        }
-
-
         return res.status(401).json({
             success: false,
-            message: "Authentication failed"
+            message: "Invalid authentication token"
         });
     }
 }
-
 
 module.exports = authMiddleware;
